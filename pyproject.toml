@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "grounded-drive"
+version = "0.1.0"
+description = "Grounded neuro-symbolic CARLA expert-policy research prototype"
+requires-python = ">=3.10"
+dependencies = ["numpy>=1.24"]
+
+[project.optional-dependencies]
+carla = ["carla==0.9.16"]
+video = ["pillow>=10", "imageio-ffmpeg>=0.6"]
+report = ["markdown>=3.6", "pymdown-extensions>=10", "playwright>=1.49"]
+
+[tool.setuptools.packages.find]
+include = ["grounded_drive*"]
