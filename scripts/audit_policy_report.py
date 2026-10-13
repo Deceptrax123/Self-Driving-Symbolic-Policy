@@ -1,5 +1,7 @@
 """Check the report's expert provenance by replaying saved decision traces."""
 from dataclasses import asdict
+from datetime import datetime, timezone
+import argparse
 import hashlib
 import importlib.metadata
 import json
@@ -27,16 +29,41 @@ def differences(actual,expected,path='',tolerance=1e-10):
     return [] if actual==expected else [f'{path}: values differ']
 
 
-def main():
-    sources=sorted((ROOT/'grounded_drive').glob('*.py'))+sorted((ROOT/'tests').glob('*.py'))+[ROOT/'scripts/evaluate.py',ROOT/'pyproject.toml',Path(__file__).resolve()]
-    manifest={'report_date':'2026-10-04 Asia/Kolkata','runtime_versions':{name:importlib.metadata.version(name) for name in ['numpy','carla','pytest']},'python_version':sys.version,'source_sha256':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},'replay_tolerance':1e-10,'episodes':[]}
-    traces=sorted((ROOT/'reports').glob('*/trace.jsonl'))+sorted((ROOT/'reports/videos').glob('*/trace.jsonl'))
+def completed_traces(trace_root):
+    """Require actual replay evidence, not a vacuous success over zero rows."""
+    traces = sorted(trace_root.glob('*/trace.jsonl')) + sorted(trace_root.glob('videos/*/trace.jsonl'))
+    traces = [path for path in traces if path.with_name('summary.json').exists()]
+    if not traces:
+        raise ValueError(f'No completed decision traces found under {trace_root}')
     for path in traces:
-        if not path.with_name('summary.json').exists():
-            continue # Failed rendering attempts do not define complete episodes.
+        if not path.read_text().strip():
+            raise ValueError(f'Completed trace is empty: {path}')
+    return traces
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--trace-root', type=Path, default=ROOT/'reports',
+                        help='Existing report folder containing completed traces')
+    parser.add_argument('--output', type=Path, default=ROOT/'reports/math/source_and_replay_audit.json')
+    args = parser.parse_args(argv)
+    try:
+        traces = completed_traces(args.trace_root)
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+    versions = {}
+    for name in ['numpy', 'carla', 'pytest']:
+        try:
+            versions[name] = importlib.metadata.version(name)
+        except importlib.metadata.PackageNotFoundError:
+            versions[name] = None
+    sources=sorted((ROOT/'grounded_drive').glob('*.py'))+sorted((ROOT/'tests').glob('*.py'))+[ROOT/'scripts/evaluate.py',ROOT/'pyproject.toml',Path(__file__).resolve()]
+    manifest={'audit_timestamp_utc':datetime.now(timezone.utc).isoformat(),'runtime_versions':versions,'python_version':sys.version,'source_sha256':{str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in sources},'replay_tolerance':1e-10,'episodes':[]}
+    for path in traces:
         policy=GroundedDrivingPolicy()
         mismatches=[]
-        rows=[json.loads(line) for line in path.read_text().splitlines()]
+        rows=[json.loads(line) for line in path.read_text().splitlines() if line.strip()]
         for index,row in enumerate(rows):
             values=dict(row['observation'])
             values['route']=tuple(tuple(p) for p in values['route'])
@@ -45,11 +72,12 @@ def main():
             delta=differences(decision,row['decision'])
             if delta:
                 mismatches.append({'row':index,'differences':delta[:4]})
-        manifest['episodes'].append({'trace':str(path.relative_to(ROOT)),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'rows':len(rows),'transition_pairs':max(0,len(rows)-1),'mismatch_rows':len(mismatches),'examples':mismatches[:3]})
+        manifest['episodes'].append({'trace':str(path.relative_to(args.trace_root)),'sha256':hashlib.sha256(path.read_bytes()).hexdigest(),'rows':len(rows),'transition_pairs':max(0,len(rows)-1),'mismatch_rows':len(mismatches),'examples':mismatches[:3]})
     unit=subprocess.run([sys.executable,'-m','pytest','-q'],cwd=ROOT,capture_output=True,text=True)
     manifest['regression_tests']={'exit_code':unit.returncode,'output':unit.stdout.strip()}
     manifest['all_replays_match']=all(x['mismatch_rows']==0 for x in manifest['episodes'])
-    (ROOT/'reports/math/source_and_replay_audit.json').write_text(json.dumps(manifest,indent=2)+'\n')
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    args.output.write_text(json.dumps(manifest,indent=2)+'\n')
     print(json.dumps({'episodes':len(manifest['episodes']),'decision_rows':sum(x['rows'] for x in manifest['episodes']),'all_replays_match':manifest['all_replays_match'],'tests':manifest['regression_tests']},indent=2))
     return 0 if manifest['all_replays_match'] and unit.returncode==0 else 1
 

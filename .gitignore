@@ -2,7 +2,9 @@
 __pycache__/
 .pytest_cache/
 *.egg-info/
-reports/*/trace.jsonl
-reports/*/dynamics.npz
-reports/
-reports/**/*.mp4
+build/
+dist/
+.coverage
+htmlcov/
+.ruff_cache/
+/reports/
