@@ -92,9 +92,6 @@ The two-layer network updates online. For acceleration error $\epsilon$, the ano
 This measures ego-dynamics mismatch. In the Town02 truck episode, the policy braked with a score of just 0.00962: the grounded relation supplied the reason to react. The exposed bicycle rollout is not used for action search or model predictive optimization.
 
 ## Evidence and limits
-
-The 4 October 2026 mathematical report records:
-
 - **Five original episodes passed:** lane following, blocked lane, pedestrian, red light, and a newly appearing Town02 truck with a different ego vehicle.
 - **Zero recorded collisions or lane invasions**, across 499.45 m of nominal routes.
 - **16 regression tests passed; 3,812 decisions replayed** across nine traces within $10^{-10}$ tolerance.
