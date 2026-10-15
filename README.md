@@ -89,6 +89,8 @@ flowchart TD
     GB --> CB
     CA --> OA["Truck case: target 6.206 m/s"]
     CB --> OB["Analytic case: target 2 m/s"]
+    OA --> AA["Feedback controller: brake 0.424"]
+    OB --> AB["Feedback controller: brake 1"]
 ```
 
 The two branches are separate executions of one program. `d` comes from route projection and actor size; `v` comes from ego motion; lead speed comes from actor velocity. The actor identity binds the explanation, while the measured variables determine the response. This demonstrates reuse of a written rule. Whether a *learned* representation preserves those bindings across unseen combinations is the next experiment.
