@@ -79,6 +79,20 @@ A `yield` decision describes `brake_before_conflict → verify_corridor_clear �
 
 The policy does not learn new programs. It reuses implemented relations across actor identities and equivalent ego-relative scenes. Regression tests cover identity changes and translated/rotated scenes. That gives me a concrete mechanism to investigate: preserve the operation while changing its bindings.
 
+```mermaid
+flowchart TD
+    A["Recorded truck: v=7.904, d=28.269, lead speed=0"] --> GA["Bind vehicle_ahead to the truck"]
+    B["Analytic lead vehicle: v=8, d=20, lead speed=0"] --> GB["Bind vehicle_ahead to the vehicle"]
+    R["Reusable program: q_follow(d, v, lead speed)"] --> CA["Call with truck bindings"]
+    R --> CB["Call with vehicle bindings"]
+    GA --> CA
+    GB --> CB
+    CA --> OA["Truck case: target 6.206 m/s"]
+    CB --> OB["Analytic case: target 2 m/s"]
+```
+
+The two branches are separate executions of one program. `d` comes from route projection and actor size; `v` comes from ego motion; lead speed comes from actor velocity. The actor identity binds the explanation, while the measured variables determine the response. This demonstrates reuse of a written rule. Whether a *learned* representation preserves those bindings across unseen combinations is the next experiment.
+
 ## What the dynamics model learns
 
 System M adds a bounded neural residual, $r_\theta\in[-2,2]$ m/s², to a physical prior:
@@ -90,6 +104,25 @@ $$
 The two-layer network updates online. For acceleration error $\epsilon$, the anomaly score is $S=\epsilon^2/[2\max(0.25,\sigma^2)]$. When $S>4.5$, the valid-route planner scales its new target by 0.7.
 
 This measures ego-dynamics mismatch. In the Town02 truck episode, the policy braked with a score of just 0.00962: the grounded relation supplied the reason to react. The exposed bicycle rollout is not used for action search or model predictive optimization.
+
+```mermaid
+flowchart TD
+    A["Action: throttle, brake, steering"] --> E["CARLA ego transition"]
+    F["Vehicle and road factors"] --> E
+    X["Actor motion, appearance, signal changes"] --> O["Next observation"]
+    E --> O
+    V["Current speed"] --> M["System M: predict next speed from speed and action"]
+    A --> M
+    M --> C["Compare predicted and observed speed"]
+    O --> C
+    C --> S["Dynamics surprise"]
+    O --> G["Ground route, actors, and signals again"]
+    G --> P["Facts and speed constraints"]
+    S --> P
+    P --> N["Next control decision"]
+```
+
+The environment affects the executed transition; System M currently sees speed and action, so a changed vehicle response can appear as prediction error. A new actor or signal can change the grounded facts without a large speed error. The planner receives both signals on the next tick.
 
 ## Evidence and limits
 - **Five original episodes passed:** lane following, blocked lane, pedestrian, red light, and a newly appearing Town02 truck with a different ego vehicle.
